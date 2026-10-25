@@ -1,5 +1,6 @@
 # Vulnserver-TRUN-ReverseShell
 
+- YOU WILL NEED ALOT OF RESTARTING IN CHALLENGES LIKE THIS. Restarting your bianry or vm is completely normal and recommend throughout your journey to code execution.
 - The goal from this challenge is get a reverse shell to our linux machine as the user running the process (mine will be called MALDEV01)
 - Requirements for this challenge is a Windows VM with Windbg (I will be using the old version, but the new one should be fine), and a linux machine to catch the shell and generate the shellcode.
 - Hopefully this challenge should be easy to understand for anyone that never done windows binary exploitation.
