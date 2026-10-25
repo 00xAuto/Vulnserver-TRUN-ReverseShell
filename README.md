@@ -232,7 +232,15 @@ But how much ? Usually it varies, but adding 16 or more nops is always guarantee
 
 Let's now add it and see :
 
+<img width="536" height="735" alt="image" src="https://github.com/user-attachments/assets/daa82797-0a5e-4fd1-8ef1-9673ef414bd0" />
 
+
+Make sure to use io.send(payload) and not sendline.
+
+
+Running the exploit, we get a shell as maldev01 !!!
+
+<img width="937" height="425" alt="image" src="https://github.com/user-attachments/assets/2edbb45a-e5b5-4a4a-a547-db5d0e0b50af" />
 
 
 
