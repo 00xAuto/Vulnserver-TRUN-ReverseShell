@@ -242,9 +242,21 @@ Running the exploit, we get a shell as maldev01 !!!
 
 <img width="937" height="425" alt="image" src="https://github.com/user-attachments/assets/2edbb45a-e5b5-4a4a-a547-db5d0e0b50af" />
 
+# 0x02. NOPs don't matter
+
+Going back to our NOP point. we here have 16 nops. If we make them 30 or 40 or 50 it won't matter, let's try 40 :
 
 
+<img width="1499" height="833" alt="image" src="https://github.com/user-attachments/assets/f729710b-074c-41e5-b996-3ed31e414c75" />
 
 
+More NOPs ? let's do 100 :
+
+<img width="1411" height="394" alt="image" src="https://github.com/user-attachments/assets/89638358-a9bb-49f4-b211-02269fd42e9b" />
+
+Hopefully this was easy and clear to understand. 
+If you have any recommendations or suggestions, please consider DMing me.
+
+Until next time!
 
 
